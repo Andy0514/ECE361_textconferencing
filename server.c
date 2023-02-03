@@ -134,8 +134,7 @@ int main(int argc, const char** argv) {
                     }
 
                     if (num_read == 0) {
-                        // Client disconnected. TODO: fill this out. It would log the user out, same as handle_exit
-                        printf("Client disconnected\n");
+                        // Client disconnected
 
                         struct CLIENT_INFO_NODE* curr = client_info_head;
                         while (curr != NULL) {
@@ -155,6 +154,7 @@ int main(int argc, const char** argv) {
                             }
                         }
                         assert(curr != NULL);
+                        printf("Client %s disconnected\n", curr->username);
                         close(i);
                         FD_CLR(i, &active_fd);
                         continue;
@@ -178,7 +178,6 @@ int main(int argc, const char** argv) {
                             handle_join_session(msg, i);
                             break;
                         case LEAVE_SESS:
-                            printf("Leave session...\n");
                             handle_leave_session(msg, i);
                             break;
                         case NEW_SESS:
@@ -208,7 +207,8 @@ struct CLIENT_INFO_NODE* read_login() {
     // Reads the login information from a text file, login.txt
     FILE* fp = fopen("login.txt", "r");
     if (fp == NULL) {
-        printf("Error: Can't read the login file");
+        printf("Error: Can't read the login file\n");
+        exit(1);
     }
 
     char *line;
@@ -231,7 +231,6 @@ struct CLIENT_INFO_NODE* read_login() {
 
         ptr = strtok(NULL, delim);
         strcpy(curr->password, ptr);
-        printf("Username: %s, Password: %s!!\n", curr->username, curr->password);
 
         curr->next = NULL;
         curr->active_session = NULL;
@@ -269,7 +268,7 @@ struct SESSION_INFO_NODE* get_session_info (const char* session_id) {
 void send_message_to_client(int sockfd, struct message* msg) {
     // Send TCP message to client
     const char* msg_str = message_to_str(msg);
-    printf("Sending: %s\n", msg_str);
+    printf("Sending message: %s\n", msg_str);
     send_string_to_client(sockfd, msg_str);
     free(msg_str);
 }
@@ -294,7 +293,6 @@ int handle_login(struct message* msg, int sockfd) {
 
     struct CLIENT_INFO_NODE* matching_username = get_client_info(msg->source);
     if (matching_username) {
-        printf("Password: %s, received: %s\n", matching_username->password, msg->data);
         if (strcmp(msg->data, matching_username->password) == 0) {
 
             if (matching_username->sockfd != -1) {
@@ -346,6 +344,7 @@ void handle_join_session(struct message* msg, int sockfd) {
     struct message new_msg;
     strcpy(new_msg.source, "SERVER");
     new_msg.type = JN_NAK;
+    char error_msg[MAX_STR_LEN];
 
     // join a session that has already been created, and not yet at capacity
     if (matching_username) {
@@ -367,25 +366,30 @@ void handle_join_session(struct message* msg, int sockfd) {
 
                 if (!added) {
                     // the session is full
-                    strcpy(new_msg.data, "Error - the session is full");
+                    sprintf(error_msg, "%s - the session is full!", msg->data);
+                    strcpy(new_msg.data, error_msg);
                 } else {
                     new_msg.type = JN_ACK;
-                    strcpy(new_msg.data, "");
+                    strcpy(new_msg.data, msg->data);
                 }
             } else {
-                strcpy(new_msg.data, "Error - you entered an invalid session ID");
+                sprintf(error_msg, "%s - you entered an invalid session ID", msg->data);
+                strcpy(new_msg.data, error_msg);
             }
 
         } else if (matching_username->sockfd != sockfd) {
             // user hasn't logged in yet (at least on this client)
-            strcpy(new_msg.data, "Error - you need to log in first");
+            sprintf(error_msg, "%s - you need to log in first", msg->data);
+            strcpy(new_msg.data, error_msg);
         } else if (matching_username->active_session != NULL) {
             // the user is already in a session
-            strcpy(new_msg.data, "Error - you're already in a session. Leave the session first");
+            sprintf(error_msg, "%s - you're already in a session. Leave the session first.", msg->data);
+            strcpy(new_msg.data, error_msg);
         }
     } else {
         // The user is not authenticated...
-        strcpy(new_msg.data, "Error - client ID unrecognized");
+        sprintf(error_msg, "%s - client ID unrecognized.", msg->data);
+        strcpy(new_msg.data, error_msg);
     }
 
     new_msg.size = strlen(new_msg.data) + 1;
@@ -448,38 +452,54 @@ void handle_new_session(struct message* msg, int sockfd) {
     struct message new_msg;
     strcpy(new_msg.source, "SERVER");
     new_msg.type = NS_NAK;
+    char error_msg[MAX_STR_LEN];
 
     if (matching_username) {
-        if (matching_username->sockfd == sockfd) {
+        if (matching_username->sockfd == sockfd && matching_username->active_session == NULL) {
 
-            // Add a session node to the head of the linked list
-            struct SESSION_INFO_NODE* new_session = malloc(sizeof(struct SESSION_INFO_NODE));
-            if (session_info_head) {
-                session_info_head->prev = new_session;
-            }
-            new_session->next = session_info_head;
-            session_info_head = new_session;
-
-            assert(msg->size < MAX_SESSION_ID);
-            strncpy(new_session->session_id, msg->data, msg->size);
-            new_session->num_connected_client = 1;
-            for (int client = 0; client < SESSION_CAP; client++) {
-                if (client == 0) {
-                    new_session->clients[client] = matching_username;
-                    matching_username->active_session = new_session;
-                } else {
-                    new_session->clients[client] = NULL;
+            // see if a session already exists with this session ID
+            struct SESSION_INFO_NODE* matching_session = get_session_info(msg->data);
+            if (matching_session == NULL) {
+                // Add a session node to the head of the linked list
+                struct SESSION_INFO_NODE *new_session = malloc(sizeof(struct SESSION_INFO_NODE));
+                if (session_info_head) {
+                    session_info_head->prev = new_session;
                 }
+                new_session->next = session_info_head;
+                session_info_head = new_session;
+
+                assert(msg->size <= MAX_SESSION_ID);
+                strncpy(new_session->session_id, msg->data, msg->size);
+                new_session->num_connected_client = 1;
+                for (int client = 0; client < SESSION_CAP; client++) {
+                    if (client == 0) {
+                        new_session->clients[client] = matching_username;
+                        matching_username->active_session = new_session;
+                    } else {
+                        new_session->clients[client] = NULL;
+                    }
+                }
+                new_msg.type = NS_ACK;
+                strcpy(new_msg.data, msg->data);
+            } else {
+                // a session already exists with this name
+                sprintf(error_msg, "%s - a session already exists with this name", msg->data);
+                strcpy(new_msg.data, error_msg);
             }
-            new_msg.type = NS_ACK;
-            strcpy(new_msg.data, "");
+        } else if (matching_username->active_session != NULL) {
+            // User is in another session
+            sprintf(error_msg, "%s - you need to exit the current session first", msg->data);
+            strcpy(new_msg.data, error_msg);
         } else {
             // user hasn't logged in yet (at least on this client)
-            strcpy(new_msg.data, "Error - you need to log in first");
+            sprintf(error_msg, "%s - you need to log in first", msg->data);
+            strcpy(new_msg.data, error_msg);
         }
+
     } else {
         // The user is not authenticated...
-        strcpy(new_msg.data, "Error - client ID unrecognized");
+        sprintf(error_msg, "%s - client ID unrecognized", msg->data);
+        strcpy(new_msg.data, error_msg);
     }
 
     new_msg.size = strlen(new_msg.data) + 1;
@@ -512,6 +532,7 @@ void handle_query(struct message* msg, int sockfd) {
     struct message new_msg;
     strcpy(new_msg.source, "SERVER");
     new_msg.type = QU_ACK;
+    new_msg.data[0] = '\0';
     struct CLIENT_INFO_NODE* curr = client_info_head;
     int curr_length = 0;
     while (curr != NULL) {
@@ -523,13 +544,24 @@ void handle_query(struct message* msg, int sockfd) {
                 strcat(new_msg.data, "no session\n");
                 curr_length += 11;
             } else {
+                printf("Finding session %s\n", curr->active_session->session_id);
                 strcat(new_msg.data, curr->active_session->session_id);
                 curr_length += (strlen(curr->active_session->session_id) + 1);
                 new_msg.data[curr_length - 1] = '\n';
-                new_msg.data[curr_length] = '\0';
+                new_msg.data[curr_length] = '\0'; // This allows the next strcat to find the right place to concatenate
             }
         }
+        curr = curr->next;
+
+        if (curr_length > MAX_DATA - MAX_NAME - MAX_SESSION_ID - 20) {
+            // It won't fit, so don't put any more data in
+            strcat(new_msg.data, "...\n");
+            curr_length += 4;
+            break;
+        }
     }
+    curr_length++;
+    new_msg.data[curr_length - 1] = '\0';
     new_msg.size = curr_length;
     send_message_to_client(sockfd, &new_msg);
 }
