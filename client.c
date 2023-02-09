@@ -14,7 +14,7 @@
 #include <fcntl.h>
 #include <pthread.h>
 
-
+ 
 // strategy: use pthread as a receiving thread to continue to listen to
 // a socket and print its inputs. Use the main thread to poll user and
 // send messages to the server
