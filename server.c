@@ -133,9 +133,8 @@ int main(int argc, const char** argv) {
                         exit(1);
                     }
 
-                    if (num_read == 0) {
+                    if (num_read == 0 || (num_read == -1 && errno == 54)) {
                         // Client disconnected
-
                         struct CLIENT_INFO_NODE* curr = client_info_head;
                         while (curr != NULL) {
                             if (curr->sockfd == i) {
@@ -144,7 +143,23 @@ int main(int argc, const char** argv) {
                                     for (int i = 0; i < SESSION_CAP; i++) {
                                         if (session->clients[i] == curr) {
                                             session->clients[i] = NULL;
+                                            session->num_connected_client--;
                                             break;
+                                        }
+                                    }
+                                    if (session->num_connected_client == 0) {
+                                        struct SESSION_INFO_NODE* p = session->prev;
+                                        struct SESSION_INFO_NODE* n = session->next;
+
+                                        // No more clients in this session, erase it
+                                        if (p && n) {
+                                            p->next = n;
+                                            n->prev = p;
+                                        } else if (p) {
+                                            p->next = NULL;
+                                        } else {
+                                            if (n) n->prev = NULL;
+                                            session_info_head = n;
                                         }
                                     }
                                 }
@@ -327,6 +342,23 @@ void handle_exit(struct message* msg) {
                 for (int i = 0; i < SESSION_CAP; i++) {
                     if (session->clients[i] == matching_username) {
                         session->clients[i] = NULL;
+                        session->num_connected_client--;
+
+                        if (session->num_connected_client == 0) {
+                            struct SESSION_INFO_NODE* p = session->prev;
+                            struct SESSION_INFO_NODE* n = session->next;
+
+                            // No more clients in this session, erase it
+                            if (p && n) {
+                                p->next = n;
+                                n->prev = p;
+                            } else if (p) {
+                                p->next = NULL;
+                            } else {
+                                if (n) n->prev = NULL;
+                                session_info_head = n;
+                            }
+                        }
                         break;
                     }
                 }
@@ -402,21 +434,17 @@ void handle_leave_session(struct message* msg, int sockfd) {
 
     // leave the current session
     if (matching_username) {
-        printf("damn\n");
         if (matching_username->sockfd == sockfd && matching_username->active_session != NULL) {
             struct SESSION_INFO_NODE *matching_session = matching_username->active_session;
-            printf("lol");
 
             int found = 0;
             for (int i = 0; i < SESSION_CAP; i++) {
                 if (matching_session->clients[i] == matching_username) {
-                    printf("asdf\n");
                     matching_session->clients[i] = NULL;
                     found = 1;
                     matching_session->num_connected_client--;
 
                     if (matching_session->num_connected_client == 0) {
-                        printf("Erasing the session\n");
                         struct SESSION_INFO_NODE* p = matching_session->prev;
                         struct SESSION_INFO_NODE* n = matching_session->next;
 
@@ -544,7 +572,6 @@ void handle_query(struct message* msg, int sockfd) {
                 strcat(new_msg.data, "no session\n");
                 curr_length += 11;
             } else {
-                printf("Finding session %s\n", curr->active_session->session_id);
                 strcat(new_msg.data, curr->active_session->session_id);
                 curr_length += (strlen(curr->active_session->session_id) + 1);
                 new_msg.data[curr_length - 1] = '\n';

@@ -343,15 +343,12 @@ int handle_login(char* cmd, char* client_id) {
         return -1;
     }
 
-    printf("%s %s %s %s\n", client_id, password, server_ip, server_port);
-
-
     struct addrinfo hints, *server_info;
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     if ((getaddrinfo(server_ip, server_port, &hints, &server_info)) != 0) {
-        printf("Unable to reach the client you specified\n");
+        printf("Unable to reach the server you specified\n");
         return -1;
     }
 
@@ -386,7 +383,6 @@ int handle_login(char* cmd, char* client_id) {
     login_message.size = strlen(password) + 1;
     strcpy(login_message.source, client_id);
     strcpy(login_message.data, password);
-    printf("%s\n", message_to_str(&login_message));
     send_message_to_server(sockfd, &login_message);
 
     // wait for server to confirm or deny login

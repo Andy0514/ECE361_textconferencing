@@ -1,6 +1,6 @@
 all: server.o client.o
-	gcc server.o -o server
-	gcc client.o -o client
+	gcc -g server.o -o server
+	gcc -g client.o -o client
 
 server.o: server.c server.h packet.h
 	gcc -c -g server.c -o server.o -lpthread

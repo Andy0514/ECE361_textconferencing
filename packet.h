@@ -53,7 +53,6 @@ const char* message_to_str (struct message* msg) {
 
 struct message* str_to_message (const char* input) {
     struct message* result = malloc(sizeof(struct message));
-    printf("%s\n", input);
 
     char* delim = strtok(input, " ");
     if (delim == NULL) {
