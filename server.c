@@ -494,6 +494,7 @@ void handle_new_session(struct message* msg, int sockfd) {
                     session_info_head->prev = new_session;
                 }
                 new_session->next = session_info_head;
+                new_session->prev = NULL;
                 session_info_head = new_session;
 
                 assert(msg->size <= MAX_SESSION_ID);
