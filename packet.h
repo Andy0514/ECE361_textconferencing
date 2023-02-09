@@ -30,7 +30,20 @@ enum MSG_TYPE {
     NS_NAK, // Doesn't have to be implemented, but I implemented it anyway
     MESSAGE,
     QUERY,
-    QU_ACK
+    QU_ACK,
+
+    // Lab 5 extras
+    // private messaging another client
+    PRIV_MSG,
+
+    // user registration / deregistration
+    REGISTER,
+    DEREGISTER,
+    REG_ACK,
+    REG_NAK,
+
+
+
 };
 
 struct message {

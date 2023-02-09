@@ -140,33 +140,13 @@ int main(int argc, const char** argv) {
                             if (curr->sockfd == i) {
                                 struct SESSION_INFO_NODE* session = curr->active_session;
                                 if (session) {
-                                    for (int i = 0; i < SESSION_CAP; i++) {
-                                        if (session->clients[i] == curr) {
-                                            session->clients[i] = NULL;
-                                            session->num_connected_client--;
-                                            break;
-                                        }
-                                    }
-                                    if (session->num_connected_client == 0) {
-                                        struct SESSION_INFO_NODE* p = session->prev;
-                                        struct SESSION_INFO_NODE* n = session->next;
-
-                                        // No more clients in this session, erase it
-                                        if (p && n) {
-                                            p->next = n;
-                                            n->prev = p;
-                                        } else if (p) {
-                                            p->next = NULL;
-                                        } else {
-                                            if (n) n->prev = NULL;
-                                            session_info_head = n;
-                                        }
-                                    }
+                                    remove_user_from_session(session, curr);
                                 }
                                 curr->active_session = NULL;
                                 curr->sockfd = -1;
                                 break;
                             }
+                            curr = curr->next;
                         }
                         assert(curr != NULL);
                         printf("Client %s disconnected\n", curr->username);
@@ -338,31 +318,7 @@ void handle_exit(struct message* msg) {
         // if currently in a session, leave this session
         if (matching_username->active_session != NULL) {
             struct SESSION_INFO_NODE* session = matching_username->active_session;
-            if (session) {
-                for (int i = 0; i < SESSION_CAP; i++) {
-                    if (session->clients[i] == matching_username) {
-                        session->clients[i] = NULL;
-                        session->num_connected_client--;
-
-                        if (session->num_connected_client == 0) {
-                            struct SESSION_INFO_NODE* p = session->prev;
-                            struct SESSION_INFO_NODE* n = session->next;
-
-                            // No more clients in this session, erase it
-                            if (p && n) {
-                                p->next = n;
-                                n->prev = p;
-                            } else if (p) {
-                                p->next = NULL;
-                            } else {
-                                if (n) n->prev = NULL;
-                                session_info_head = n;
-                            }
-                        }
-                        break;
-                    }
-                }
-            }
+            remove_user_from_session(session, matching_username);
             matching_username->active_session = NULL;
         }
 
@@ -436,42 +392,43 @@ void handle_leave_session(struct message* msg, int sockfd) {
     if (matching_username) {
         if (matching_username->sockfd == sockfd && matching_username->active_session != NULL) {
             struct SESSION_INFO_NODE *matching_session = matching_username->active_session;
-
-            int found = 0;
-            for (int i = 0; i < SESSION_CAP; i++) {
-                if (matching_session->clients[i] == matching_username) {
-                    matching_session->clients[i] = NULL;
-                    found = 1;
-                    matching_session->num_connected_client--;
-
-                    if (matching_session->num_connected_client == 0) {
-                        struct SESSION_INFO_NODE* p = matching_session->prev;
-                        struct SESSION_INFO_NODE* n = matching_session->next;
-
-                        // No more clients in this session, erase it
-                        if (p && n) {
-                            p->next = n;
-                            n->prev = p;
-                        } else if (p) {
-                            p->next = NULL;
-                        } else {
-                            if (n) n->prev = NULL;
-                            session_info_head = n;
-                        }
-                    } else {
-                        printf("There are still %d users in session\n", matching_session->num_connected_client);
-                    }
-                    break;
-                }
-            }
-
+            remove_user_from_session(matching_session, matching_username);
             matching_username->active_session = NULL;
-            assert(found);
-        } else {
-            printf("%d %d %p\n", sockfd, matching_username->sockfd, matching_username->active_session);
         }
     }
     // No need to send any reply, even if it results in error
+}
+
+// Helps with deleting a user from a session, and clearing the session too if it's now empty
+void remove_user_from_session(struct SESSION_INFO_NODE* session, struct CLIENT_INFO_NODE* client) {
+    int found = 0;
+    for (int i = 0; i < SESSION_CAP; i++) {
+        if (session->clients[i] == client) {
+            session->clients[i] = NULL;
+            found = 1;
+            session->num_connected_client--;
+
+            if (session->num_connected_client == 0) {
+                struct SESSION_INFO_NODE* p = session->prev;
+                struct SESSION_INFO_NODE* n = session->next;
+
+                // No more clients in this session, erase it
+                if (p && n) {
+                    p->next = n;
+                    n->prev = p;
+                } else if (p) {
+                    p->next = NULL;
+                } else {
+                    if (n) n->prev = NULL;
+                    session_info_head = n;
+                }
+            } else {
+                printf("There are still %d users in session\n", session->num_connected_client);
+            }
+            break;
+        }
+    }
+    assert(found);
 }
 
 // Create and join a session
