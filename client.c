@@ -83,7 +83,7 @@ void* receive_messages(void* fd) {
                         printf("Query result: \n%s\n", msg->data);
                         break;
                     case MESSAGE:
-                        printf("Message received: %s\n", msg->data);
+                        printf("Message received from %s: %s\n", msg->source, msg->data);
                         break;
                     default:
                         printf("Received known / unexpected packet!!!\n");
