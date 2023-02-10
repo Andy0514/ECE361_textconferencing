@@ -192,6 +192,9 @@ int main(int argc, const char** argv) {
                         case QUERY:
                             handle_query(msg, i);
                             break;
+                        case DM_REQ:
+                            handle_dm(msg, i);
+                            break;
                         default:
                             printf("No packet type has been matched");
                             exit(1);
@@ -586,6 +589,61 @@ void handle_register_user(struct message* msg, int sockfd) {
             // Refresh the login information
             client_info_head = read_login();
         }
+    }
+    new_msg.size = strlen(new_msg.data) + 1;
+    send_message_to_client(sockfd, &new_msg);
+}
+
+
+// Handle direct messaging from one user to another. The message should be checke
+// by the client, so we can assume error free.
+void handle_dm(struct message* msg, int sockfd) {
+    struct message new_msg;
+    strcpy(new_msg.source, "SERVER");
+    new_msg.type = DM_NAK;
+
+    struct CLIENT_INFO_NODE* source_username = get_client_info(msg->source);
+    if (source_username != NULL && source_username->sockfd == sockfd) {
+        
+        // Try to extract destination information
+        char receiver[MAX_NAME];
+        char message[MAX_DATA];
+
+        // get receiver ID
+        char* delim = strtok(msg->data, " ");
+        if (delim != NULL) {
+            strncpy(receiver, delim, MAX_NAME);
+            assert(receiver[MAX_NAME-1] == '\0');
+
+            delim = strtok(NULL, "\n");
+            if (delim != NULL) {
+                strncpy(message, delim, MAX_DATA);
+                assert(receiver[MAX_DATA-1] == '\0');
+            }
+        }
+
+        if (delim == NULL) {
+            strcpy(new_msg.data, "Message formatting error");
+        } else {
+            // Everything looks good so far, try to find the stated receiver
+            struct CLIENT_INFO_NODE* recv_client = get_client_info(receiver);
+            if (recv_client == NULL) {
+                strcpy(new_msg.data, "The receiving client does not exist");
+            } else if (recv_client->sockfd == -1) {
+                strcpy(new_msg.data, "The receiving client is not online");
+            } else {
+                // We can send the message to the receiver
+                strcpy(new_msg.data, message);
+                new_msg.size = strlen(new_msg.data) + 1;
+                new_msg.type = DM_MSG;
+                strncpy(new_msg.source, msg->source, MAX_NAME);
+                send_message_to_client(recv_client->sockfd, &new_msg);
+                return;
+            }
+        }
+
+    } else {
+        strcpy(new_msg.data, "An error was encountered by the server...");
     }
     new_msg.size = strlen(new_msg.data) + 1;
     send_message_to_client(sockfd, &new_msg);

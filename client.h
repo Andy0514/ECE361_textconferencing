@@ -16,7 +16,8 @@ enum CLIENT_ACTION_TYPE {
     LIST,
     QUIT,
     CLIENT_REGISTER,
-    TEXT
+    TEXT,
+    DM
 };
 
 char* get_user_input(enum CLIENT_ACTION_TYPE* action);
@@ -37,6 +38,8 @@ void handle_create_session(char* session_name, int sockfd, char* client_id);
 void handle_list(int sockfd, char* client_id);
 
 void handle_send_text (int sockfd, char* msg, char* client_id);
+
+void handle_send_dm (int sockfd, char* cmd, char* client_id);
 
 void send_message_to_server(int sockfd, struct message* msg);
 

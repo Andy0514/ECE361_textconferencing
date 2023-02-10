@@ -34,7 +34,9 @@ enum MSG_TYPE {
 
     // Lab 5 extras
     // private messaging another client
-    PRIV_MSG,
+    DM_REQ,
+    DM_MSG,
+    DM_NAK,
 
     // user registration 
     REGISTER,

@@ -83,7 +83,13 @@ void* receive_messages(void* fd) {
                         printf("Query result: \n%s\n", msg->data);
                         break;
                     case MESSAGE:
-                        printf("Message received from %s: %s\n", msg->source, msg->data);
+                        printf("Session message from %s: %s\n", msg->source, msg->data);
+                        break;
+                    case DM_MSG:
+                        printf("Direct message from %s: %s\n", msg->source, msg->data);
+                        break;
+                    case DM_NAK:
+                        printf("Could not send direct message: %s\n", msg->data);
                         break;
                     default:
                         printf("Received known / unexpected packet!!!\n");
@@ -176,6 +182,13 @@ int main(int argc, const char** argv) {
             case TEXT:
                 if (sockfd != -1) {
                     handle_send_text(sockfd, buf, client_id);
+                } else {
+                    printf("Please login first\n");
+                }
+                break;
+            case DM:
+                if (sockfd != -1) {
+                    handle_send_dm(sockfd, buf, client_id);
                 } else {
                     printf("Please login first\n");
                 }
@@ -275,6 +288,16 @@ char* get_user_input(enum CLIENT_ACTION_TYPE* action) {
             return NULL;
         } else if (strcmp(first_word, "/register") == 0) {
             *action = CLIENT_REGISTER;
+            char* the_rest = malloc(MAX_STR_LEN * sizeof(char));
+            delim = strtok(NULL, "\0");
+            if (delim != NULL) {
+                strcpy(the_rest, delim);
+            } else {
+                strcpy(the_rest, "");
+            }
+            return the_rest;
+        } else if (strcmp(first_word, "/dm") == 0) {
+            *action = DM;
             char* the_rest = malloc(MAX_STR_LEN * sizeof(char));
             delim = strtok(NULL, "\0");
             if (delim != NULL) {
@@ -629,6 +652,49 @@ void handle_send_text (int sockfd, char* msg, char* client_id) {
     text_message.size = strlen(msg) + 1;
     strcpy(text_message.data, msg);
     strcpy(text_message.source, client_id);
+    send_message_to_server(sockfd, &text_message);
+}
+
+void handle_send_dm (int sockfd, char* cmd, char* client_id) {
+
+    struct message text_message;
+    text_message.type = DM_REQ;
+    strcpy(text_message.source, client_id);
+    
+    char receiver[MAX_NAME];
+    char msg [MAX_DATA];
+    int available_message_size = MAX_DATA - MAX_NAME - 2;
+    char* error_msg = "2 arguments are requires: <receiver client ID> <message>";
+
+    // get receiver ID
+    char* delim = strtok(cmd, " ");
+    if (delim == NULL) {
+        printf("%s\n", error_msg);
+        return;
+    }
+
+    strncpy(receiver, delim, MAX_NAME);
+    if (receiver[MAX_NAME - 1] != '\0') {
+        printf("Receiver ID is too long, try again.\n");
+        return;
+    }
+
+
+    // get message
+    delim = strtok(NULL, "\n");
+    if (delim == NULL) {
+        printf("%s\n", error_msg);
+        return;
+    }
+
+    strncpy(msg, delim, available_message_size);
+    if (msg[available_message_size - 1] != '\0') {
+        printf("Message is too long and will be truncated.\n");
+        msg[available_message_size-1] = '\0';
+    }
+
+    sprintf(text_message.data, "%s %s", receiver, msg);
+    text_message.size = strlen(text_message.data) + 1;
     send_message_to_server(sockfd, &text_message);
 }
 
