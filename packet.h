@@ -36,14 +36,10 @@ enum MSG_TYPE {
     // private messaging another client
     PRIV_MSG,
 
-    // user registration / deregistration
+    // user registration 
     REGISTER,
-    DEREGISTER,
     REG_ACK,
-    REG_NAK,
-
-
-
+    REG_NAK
 };
 
 struct message {

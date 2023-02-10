@@ -56,4 +56,8 @@ void handle_send_message(struct message* msg, int sockfd);
 void handle_query(struct message* msg, int sockfd);
 
 void remove_user_from_session(struct SESSION_INFO_NODE* session, struct CLIENT_INFO_NODE* client);
+
+
+// Lab 5
+void handle_register_user(struct message* msg, int sockfd);
 #endif //ECE361_TEXTCONFERENCING_SERVER_H

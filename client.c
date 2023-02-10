@@ -113,6 +113,13 @@ int main(int argc, const char** argv) {
         char* buf = get_user_input(&curr_action);
 
         switch (curr_action) {
+            case CLIENT_REGISTER:
+                if (sockfd == -1) {
+                    handle_register(buf);
+                } else {
+                    printf("Please log out first if you want to register a separate account\n");
+                }
+                break;
             case CLIENT_LOGIN:
                 if (sockfd == -1) {
                     sockfd = handle_login(buf, client_id);
@@ -266,6 +273,16 @@ char* get_user_input(enum CLIENT_ACTION_TYPE* action) {
         } else if (strcmp(first_word, "/quit") == 0) {
             *action = QUIT;
             return NULL;
+        } else if (strcmp(first_word, "/register") == 0) {
+            *action = CLIENT_REGISTER;
+            char* the_rest = malloc(MAX_STR_LEN * sizeof(char));
+            delim = strtok(NULL, "\0");
+            if (delim != NULL) {
+                strcpy(the_rest, delim);
+            } else {
+                strcpy(the_rest, "");
+            }
+            return the_rest;
         }
     }
 
@@ -331,7 +348,7 @@ int handle_login(char* cmd, char* client_id) {
 
 
     // get server port address;
-    delim = strtok(NULL, "\n");
+    delim = strtok(NULL, " \n");
     if (delim == NULL) {
         printf("%s\n", error_msg);
         return -1;
@@ -401,6 +418,142 @@ int handle_login(char* cmd, char* client_id) {
         return -1;
     }
 }
+
+
+
+void handle_register (char* cmd) {
+    // both incluing \0
+#define IP_LENGTH 16
+#define PORT_LENGTH 6
+
+    int sockfd;
+    char client_id[MAX_NAME];
+    char password[MAX_PASSWD];
+    char server_ip[IP_LENGTH];
+    char server_port[PORT_LENGTH];
+    char* error_msg = "4 arguments are required: <new client ID> <password> <server IP> <server port>\n";
+
+    // get client ID
+    char* delim = strtok(cmd, " ");
+    if (delim == NULL) {
+        printf("%s\n", error_msg);
+        return;
+    }
+
+    strncpy(client_id, delim, MAX_NAME);
+    if (client_id[MAX_NAME - 1] != '\0') {
+        printf("client ID is too long, try again.\n");
+        return;
+    }
+
+
+    // get password
+    delim = strtok(NULL, " ");
+    if (delim == NULL) {
+        printf("%s\n", error_msg);
+        return;
+    }
+
+    strncpy(password, delim, MAX_PASSWD);
+    if (password[MAX_PASSWD - 1] != '\0') {
+        printf("password is too long, try again\n");
+        return;
+    }
+
+    // Do format checking on the password - it can't contain spaces
+    for (int i = 0; i < MAX_PASSWD; i++) {
+        if (password[i] == ' ' || password[i] == '\t' || password[i] == '\r' || password[i] == '\n' || password[i] == '\f') {
+            printf("Password contains invalid character, try again\n");
+            return;
+        }
+    }
+
+
+    //get server IP address;
+    delim = strtok(NULL, " ");
+    if (delim == NULL) {
+        printf("%s\n", error_msg);
+        return;
+    }
+
+    strncpy(server_ip, delim, IP_LENGTH);
+    if (server_ip[IP_LENGTH - 1] != '\0') {
+        printf("IP address is probably wrong, try again\n");
+        return;
+    }
+
+
+    // get server port address;
+    delim = strtok(NULL, " \n");
+    if (delim == NULL) {
+        printf("%s\n", error_msg);
+        return;
+    }
+
+    strncpy(server_port, delim, PORT_LENGTH);
+    if (server_port[PORT_LENGTH - 1] != '\0') {
+        printf("IP port is probably wrong, try again\n");
+        return;
+    }
+
+    struct addrinfo hints, *server_info;
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    if ((getaddrinfo(server_ip, server_port, &hints, &server_info)) != 0) {
+        printf("Unable to reach the server you specified\n");
+        return;
+    }
+
+    struct addrinfo* connectionPtr;
+    // loop through all the results and connect to the first we can
+    for(connectionPtr = server_info; connectionPtr != NULL; connectionPtr = connectionPtr->ai_next) {
+        if ((sockfd = socket(connectionPtr->ai_family,
+                             connectionPtr->ai_socktype,
+                             connectionPtr->ai_protocol)) == -1) {
+            printf("Socket error\n");
+            continue;
+        }
+
+        if (connect(sockfd, connectionPtr->ai_addr, connectionPtr->ai_addrlen) == -1) {
+            close(sockfd);
+            printf("Cannot connect\n");
+            continue;
+        }
+        break;
+    }
+
+    if (connectionPtr == NULL) {
+        printf("The client failed to connect.\n");
+        return;
+    }
+
+    freeaddrinfo(server_info);
+
+    // Send login info to the server
+    struct message login_message;
+    login_message.type = REGISTER;
+    login_message.size = strlen(password) + 1;
+    strcpy(login_message.source, client_id);
+    strcpy(login_message.data, password);
+    send_message_to_server(sockfd, &login_message);
+
+    // wait for server to confirm or deny login
+    char buf[MAX_STR_LEN];
+    int num_read = recv(sockfd, buf, MAX_STR_LEN, 0);
+    buf[num_read] = '\0';
+
+    struct message *msg = str_to_message(buf);
+    if (msg->type == REG_ACK) {
+        printf("You've now registered as: %s. Please login again.\n", client_id);
+        free(msg);
+    } else {
+        printf("Registration failed: %s\n", msg->data);
+        free(msg);
+    }
+}
+
+
 
 
 void handle_join_session(char* session_name, int sockfd, char* client_id) {

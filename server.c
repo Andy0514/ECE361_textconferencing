@@ -21,6 +21,8 @@
 struct CLIENT_INFO_NODE* client_info_head = NULL;
 struct SESSION_INFO_NODE* session_info_head = NULL;
 
+#define LOGIN_FILE "login.txt"
+
 // get sockaddr, IPv4 or IPv6
 void *get_in_addr(struct sockaddr *sa) {
     if (sa->sa_family == AF_INET) {
@@ -159,6 +161,12 @@ int main(int argc, const char** argv) {
                     struct message * msg = str_to_message(buf);
                     int result;
                     switch (msg->type) {
+                        case REGISTER:
+                            // Register doesn't involve logging in, so the FD set is cleared rightaway.
+                            // User has to establish a separate connection to log in.
+                            handle_register_user(msg, i);
+                            FD_CLR(i, &active_fd);
+                            break;
                         case LOGIN:
                             result = handle_login(msg, i);
                             if (result == -1) {
@@ -200,7 +208,7 @@ int main(int argc, const char** argv) {
 
 struct CLIENT_INFO_NODE* read_login() {
     // Reads the login information from a text file, login.txt
-    FILE* fp = fopen("login.txt", "r");
+    FILE* fp = fopen(LOGIN_FILE, "r");
     if (fp == NULL) {
         printf("Error: Can't read the login file\n");
         exit(1);
@@ -232,6 +240,7 @@ struct CLIENT_INFO_NODE* read_login() {
         curr->sockfd = -1;
     }
     free(line);
+    fclose(fp);
     return head;
 }
 
@@ -550,3 +559,35 @@ void handle_query(struct message* msg, int sockfd) {
     new_msg.size = curr_length;
     send_message_to_client(sockfd, &new_msg);
 }
+
+
+// Check the user information and put it into the login file for persistent storage.
+// Assume that the username and password are all valid (they're checked by the client).
+// The user isn't automatically logged-in by this - they have to login separately.
+void handle_register_user(struct message* msg, int sockfd) {
+    struct message new_msg;
+    strcpy(new_msg.source, "SERVER");
+    new_msg.type = REG_NAK;
+
+    struct CLIENT_INFO_NODE* existing_username = get_client_info(msg->source);
+    if (existing_username != NULL) {
+        strcpy(new_msg.data, "The username has already been registered.");
+    } else {
+        FILE* fp = fopen(LOGIN_FILE, "a");
+        if (fp == NULL) {
+            strcpy(new_msg.data, "Server cannot write to the login file.");
+        } else {
+            fprintf(fp, "%s %s\n", msg->source, msg->data);
+            strcpy(new_msg.data, "");
+            new_msg.type = REG_ACK;
+            fclose(fp);
+            printf("Registration successful for user %s\n", msg->source);
+
+            // Refresh the login information
+            client_info_head = read_login();
+        }
+    }
+    new_msg.size = strlen(new_msg.data) + 1;
+    send_message_to_client(sockfd, &new_msg);
+}
+

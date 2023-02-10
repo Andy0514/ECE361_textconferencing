@@ -15,6 +15,7 @@ enum CLIENT_ACTION_TYPE {
     CREATESESSION,
     LIST,
     QUIT,
+    CLIENT_REGISTER,
     TEXT
 };
 
@@ -22,6 +23,8 @@ char* get_user_input(enum CLIENT_ACTION_TYPE* action);
 
 // return sockfd, or -1 for failure - try again
 int handle_login(char* cmd, char* client_id);
+
+void handle_register(char* cmd);
 
 void handle_logout(int sockfd, char* client_id);
 
