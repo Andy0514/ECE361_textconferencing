@@ -228,18 +228,19 @@ char* get_user_input(enum CLIENT_ACTION_TYPE* action) {
     // Remove the trailing newline, make sure the buffer is null-terminating
     buf[strlen(buf) - 1] = '\0';
 
-    // get the first word
-    char first_word[MAX_STR_LEN];
 
-    char* delim = strtok(buf, " ");
-    if (delim == NULL) {
-        // There are no spaces in the command, the entire thing is the first word
-        strcpy(first_word, buf);
-    } else {
-        strcpy(first_word, delim);
-    }
+    if (buf[0] == '/') {
+        // get the first word
+        char first_word[MAX_STR_LEN];
 
-    if (first_word[0] == '/') {
+        char* delim = strtok(buf, " ");
+        if (delim == NULL) {
+            // There are no spaces in the command, the entire thing is the first word
+            strcpy(first_word, buf);
+        } else {
+            strcpy(first_word, delim);
+        }
+        
         // this is likely a command
         if (strcmp(first_word, "/login") == 0) {
             char* the_rest = malloc(MAX_STR_LEN * sizeof(char));
@@ -319,7 +320,7 @@ char* get_user_input(enum CLIENT_ACTION_TYPE* action) {
 
 int handle_login(char* cmd, char* client_id) {
     // both incluing \0
-#define IP_LENGTH 16
+#define IP_LENGTH 50
 #define PORT_LENGTH 6
 
     int sockfd;
@@ -446,7 +447,7 @@ int handle_login(char* cmd, char* client_id) {
 
 void handle_register (char* cmd) {
     // both incluing \0
-#define IP_LENGTH 16
+#define IP_LENGTH 50
 #define PORT_LENGTH 6
 
     int sockfd;
